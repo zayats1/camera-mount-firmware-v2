@@ -7,7 +7,7 @@
 use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
+
 use panic_probe as _;
 
 // Provide an alias for our BSP so we can switch targets quickly.
@@ -21,6 +21,8 @@ use bsp::hal::{
     sio::Sio,
     watchdog::Watchdog,
 };
+
+use crate::drivers::{Stepper, StepperWithDriver};
 
 mod drivers;
 
@@ -60,15 +62,16 @@ fn main() -> ! {
     // Notably, on the Pico W, the LED is not connected to any of the RP2040 GPIOs but to the cyw43 module instead. If you have
     // a Pico W and want to toggle a LED with a simple GPIO output pin, you can connect an external
     // LED to one of the GPIO pins, and reference that pin here.
-    let mut led_pin = pins.led.into_push_pull_output();
+    let clk_pin = pins.led.into_push_pull_output();
+    let dir_pin = pins.gpio11.into_push_pull_output();
+    let speed = 2;
 
+    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
+    let steps = 1;
     loop {
         info!("on!");
-        led_pin.set_high().unwrap();
-        delay.delay_ms(500);
-        info!("off!");
-        led_pin.set_low().unwrap();
-        delay.delay_ms(500);
+        let delay_ = |t: u32| delay.delay_ms(t);
+        stepper.steps(steps, delay_);
     }
 }
 
