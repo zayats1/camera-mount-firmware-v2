@@ -8,7 +8,7 @@ pub enum Directions {
 }
 
 pub trait Stepper {
-    fn steps<F: FnMut(u32) -> ()>(&mut self, steps: usize, delay: F);
+    fn steps<F: FnMut(u32)>(&mut self, steps: usize, delay: F);
     fn stop(&mut self);
     fn hold(&mut self);
     fn set_dir(&mut self, dir: Directions);
