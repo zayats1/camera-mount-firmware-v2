@@ -25,7 +25,7 @@ impl<'a, T: PwmPin<Duty = u16>> Servo<'a, T> {
         self.pin.set_duty(duty_on_the_degree);
     }
 
-    pub fn to_center(self) {
+    pub fn to_center(&mut self) {
         self.pin.set_duty(self.duty_on_90);
     }
 }
