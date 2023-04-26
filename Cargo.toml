@@ -4,8 +4,8 @@ name = "rp2040-project-template"
 version = "0.1.0"
 
 [dependencies]
-cortex-m = "0.7"
-cortex-m-rt = "0.7"
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.3"
 embedded-hal = { version = "0.2.7", features = ["unproven"] }
 
 # Versions >0.3.4 contain a breaking change (wire format 4) and version 0.3.3 is yanked,
