@@ -4,8 +4,16 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use super::stepper::*;
+#![allow(unused)]
+
 use embedded_hal::digital::v2::OutputPin;
+
+#[derive(Default)]
+pub enum Directions {
+    #[default]
+    Forward,
+    Backward,
+}
 
 pub struct StepperWithDriver<T: OutputPin, U: OutputPin> {
     dir_pin: T,
@@ -15,16 +23,16 @@ pub struct StepperWithDriver<T: OutputPin, U: OutputPin> {
     acceleration: i32,
 }
 
-impl<T, U> Stepper for StepperWithDriver<T, U>
+impl<T, U> StepperWithDriver<T, U>
 where
     T: OutputPin,
     U: OutputPin,
 {
-    fn set_dir(&mut self, dir: super::stepper::Directions) {
+    pub fn set_dir(&mut self, dir: Directions) {
         self.dir = dir
     }
 
-    fn steps<F: FnMut(u32)>(&mut self, steps: usize, mut delay_ms: F) {
+    pub fn steps<F: FnMut(u32)>(&mut self, steps: usize, mut delay_ms: F) {
         match self.dir {
             Directions::Forward => {
                 self.dir_pin.set_high().unwrap_or_default();
@@ -58,13 +66,7 @@ where
     fn set_acceleration(&mut self, acceleration: i32) {
         self.acceleration = acceleration;
     }
-}
 
-impl<T, U: OutputPin> StepperWithDriver<T, U>
-where
-    T: OutputPin,
-    U: OutputPin,
-{
     pub fn new(dir_pin: T, clk: U, speed: u32, acceleration: i32) -> Self {
         Self {
             dir_pin,
