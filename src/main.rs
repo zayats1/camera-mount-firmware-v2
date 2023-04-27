@@ -25,7 +25,7 @@ use bsp::hal::{
     watchdog::Watchdog,
 };
 
-use crate::drivers::{Stepper, StepperWithDriver};
+use crate::drivers::StepperWithDriver;
 
 mod drivers;
 
