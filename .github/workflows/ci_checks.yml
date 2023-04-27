@@ -17,9 +17,7 @@ jobs:
           # Nightly is only for reference and allowed to fail
           - rust: nightly
             experimental: true
-        os:
-        ubuntu-latest
-    runs-on: $os
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
