@@ -19,7 +19,7 @@ jobs:
             experimental: true
         os:
         ubuntu-latest
-    runs-on: ${{os }}
+    runs-on: $os
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
