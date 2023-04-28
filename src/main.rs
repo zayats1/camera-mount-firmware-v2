@@ -90,11 +90,11 @@ fn main() -> ! {
             let core = unsafe { pac::CorePeripherals::steal() };
             // Set up the delay for the second core.
             let mut delay = Delay::new(core.SYST, sys_freq);
-            let steps = 10; // TODO
+            // let steps = 10; // TODO
             let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
             loop {
                 let delay_ = |t: u32| delay.delay_ms(t);
-                stepper.steps(steps, delay_);
+                stepper.steps(delay_);
             }
         })
         .unwrap();

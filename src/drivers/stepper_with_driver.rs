@@ -32,7 +32,7 @@ where
         self.dir = dir
     }
 
-    pub fn steps<F: FnMut(u32)>(&mut self, _steps: usize, mut delay_ms: F) {
+    pub fn steps<F: FnMut(u32)>(&mut self, mut delay_ms: F) {
         match self.dir {
             Directions::Forward => {
                 self.dir_pin.set_high().unwrap_or_default();
