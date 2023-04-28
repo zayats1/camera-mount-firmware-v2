@@ -20,22 +20,27 @@ use rp_pico as bsp;
 
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
+    multicore::{Multicore, Stack},
     pac,
     sio::Sio,
     watchdog::Watchdog,
 };
 
+use cortex_m::delay::Delay;
+
 use crate::drivers::StepperWithDriver;
 
 mod drivers;
+
+static mut CORE1_STACK: Stack<4096> = Stack::new();
 
 #[entry]
 fn main() -> ! {
     info!("Program start");
     let mut pac = pac::Peripherals::take().unwrap();
-    let core = pac::CorePeripherals::take().unwrap();
+    // let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    let sio = Sio::new(pac.SIO);
+    let mut sio = Sio::new(pac.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
     let external_xtal_freq_hz = 12_000_000u32;
@@ -51,7 +56,7 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    // let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     let pins = bsp::Pins::new(
         pac.IO_BANK0,
@@ -69,12 +74,33 @@ fn main() -> ! {
     let dir_pin = pins.gpio11.into_push_pull_output();
     let speed = 2;
 
-    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
-    let steps = 1;
+    // Setup core 2 for stepper motor
+    let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
+
+    let sys_freq = clocks.system_clock.freq().to_Hz();
+
+    let cores = mc.cores();
+
+    let core1 = &mut cores[1];
+    core1
+        .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
+            // Get the second core's copy of the `CorePeripherals`, which are per-core.
+            // Unfortunately, `cortex-m` doesn't support this properly right now,
+            // so we have to use `steal`.
+            let core = unsafe { pac::CorePeripherals::steal() };
+            // Set up the delay for the second core.
+            let mut delay = Delay::new(core.SYST, sys_freq);
+            let steps = 10; // TODO
+            let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
+            loop {
+                let delay_ = |t: u32| delay.delay_ms(t);
+                stepper.steps(steps, delay_);
+            }
+        })
+        .unwrap();
+
     loop {
         info!("on!");
-        let delay_ = |t: u32| delay.delay_ms(t);
-        stepper.steps(steps, delay_);
     }
 }
 
