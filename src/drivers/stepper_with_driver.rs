@@ -42,11 +42,11 @@ where
             }
         }
         let delay_time = 1000 / self.speed;
-            // It is unstopable for now
-            self.clk.set_high().unwrap_or_default();
-            delay_ms(delay_time); // for prototype
-            self.clk.set_low().unwrap_or_default();
-            delay_ms(delay_time);
+        // It is unstopable for now
+        self.clk.set_high().unwrap_or_default();
+        delay_ms(delay_time); // for prototype
+        self.clk.set_low().unwrap_or_default();
+        delay_ms(delay_time);
     }
 
     fn stop(&mut self) {
