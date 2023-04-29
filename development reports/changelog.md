@@ -1,4 +1,4 @@
-# Camera mount firmware changelog:
+Camera mount firmware changelog:
 
 ## 0.0.1
 
@@ -24,36 +24,50 @@
 
 and more smaller changes
 
-## TODO
-
 ### 0.0.2
 
 1. Make stepper driver run non blocking  
+- **commit:** 9e35165c42b29fea2273d63796456411896a04ed
+  
+  **move stepper to the second core for now**
+2. Make a branch with some RTOS
+   
+   **branch:**  rtos
+   
+   **commit:** f2ae96c84523d2f684573fc4673bb855b0b8ffe8
+   
+   **this branch with rtos doesn't compile yet**
+   
+   I chose embassy because it looks more stable to me
 
-2. do some testing with real stepper motor and A4988 driver module
+and code cleanup
+
+## TODO
 
 ### 0.0.3
 
-1. Make a branch with some RTOS
-
+1. add UART comunication
 2. add some calculations and servo code to main
-
-3. add some unit tests
-
-### pre alpha 4
-
-- add UART comunication
 
 ### 0.0.4
 
-- add more calculations and test with bluetooth module
+1. do some testing with real stepper motor and A4988 driver module
+2. add some unit tests
+
+### 0.0.5
+
+1. add more calculations and test with bluetooth module
+
+### 0.0.6
+
+1. add more calculations 
+
+2. cleanup code a bit
 
 ## <u>0.1.0</u>
 
 1. test the project on my custom dev kit
 
 2. small changes and refactor code
-
-
 
 >  Bogdan Zayats -- your cute stargazer hare
