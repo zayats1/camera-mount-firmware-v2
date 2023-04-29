@@ -6,6 +6,8 @@
 
 #![allow(unused)]
 
+use core::future::Future;
+
 use embedded_hal::digital::v2::OutputPin;
 
 #[derive(Default)]
@@ -19,7 +21,7 @@ pub struct StepperWithDriver<T: OutputPin, U: OutputPin> {
     dir_pin: T,
     clk: U,
     dir: Directions,
-    speed: u32,
+    speed: u64,
     acceleration: i32,
 }
 
@@ -32,7 +34,11 @@ where
         self.dir = dir
     }
 
-    pub fn steps<F: FnMut(u32)>(&mut self, mut delay_ms: F) {
+    pub async fn steps<F, Fut>(&mut self, mut delay_ms: F)
+    where
+        F: FnMut(u64) -> Fut,
+        Fut: Future<Output = ()>,
+    {
         match self.dir {
             Directions::Forward => {
                 self.dir_pin.set_high().unwrap_or_default();
@@ -42,11 +48,11 @@ where
             }
         }
         let delay_time = 1000 / self.speed;
-            // It is unstopable for now
-            self.clk.set_high().unwrap_or_default();
-            delay_ms(delay_time); // for prototype
-            self.clk.set_low().unwrap_or_default();
-            delay_ms(delay_time);
+        // It is unstopable for now
+        self.clk.set_high().unwrap_or_default();
+        delay_ms(delay_time); // for prototype
+        self.clk.set_low().unwrap_or_default();
+        delay_ms(delay_time);
     }
 
     fn stop(&mut self) {
@@ -57,7 +63,7 @@ where
         todo!()
     }
 
-    fn set_speed(&mut self, speed: u32) {
+    fn set_speed(&mut self, speed: u64) {
         self.speed = speed;
     }
 
@@ -65,7 +71,7 @@ where
         self.acceleration = acceleration;
     }
 
-    pub fn new(dir_pin: T, clk: U, speed: u32, acceleration: i32) -> Self {
+    pub fn new(dir_pin: T, clk: U, speed: u64, acceleration: i32) -> Self {
         Self {
             dir_pin,
             clk,

@@ -6,8 +6,9 @@
 
 #![no_std]
 #![no_main]
+#![feature(type_alias_impl_trait)]
 
-use bsp::entry;
+// use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
 
@@ -18,33 +19,26 @@ use panic_probe as _;
 use rp_pico as bsp;
 // use sparkfun_pro_micro_rp2040 as bsp;
 
-use bsp::hal::{
-    clocks::{init_clocks_and_plls, Clock},
-    multicore::{Multicore, Stack},
-    pac,
-    sio::Sio,
-    watchdog::Watchdog,
-};
-
-use cortex_m::delay::Delay;
+use bsp::hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog};
 
 use crate::drivers::StepperWithDriver;
 
 mod drivers;
 
-static mut CORE1_STACK: Stack<4096> = Stack::new();
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
 
-#[entry]
-fn main() -> ! {
+#[embassy_executor::main]
+async fn main(_spawner: Spawner) {
     info!("Program start");
     let mut pac = pac::Peripherals::take().unwrap();
     // let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    let mut sio = Sio::new(pac.SIO);
+    let sio = Sio::new(pac.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
     let external_xtal_freq_hz = 12_000_000u32;
-    let clocks = init_clocks_and_plls(
+    let _clocks = init_clocks_and_plls(
         external_xtal_freq_hz,
         pac.XOSC,
         pac.CLOCKS,
@@ -74,33 +68,13 @@ fn main() -> ! {
     let dir_pin = pins.gpio11.into_push_pull_output();
     let speed = 2;
 
-    // Setup core 2 for stepper motor
-    let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
-
-    let sys_freq = clocks.system_clock.freq().to_Hz();
-
-    let cores = mc.cores();
-
-    let core1 = &mut cores[1];
-    core1
-        .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
-            // Get the second core's copy of the `CorePeripherals`, which are per-core.
-            // Unfortunately, `cortex-m` doesn't support this properly right now,
-            // so we have to use `steal`.
-            let core = unsafe { pac::CorePeripherals::steal() };
-            // Set up the delay for the second core.
-            let mut delay = Delay::new(core.SYST, sys_freq);
-            // let steps = 10; // TODO
-            let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
-            loop {
-                let delay_ = |t: u32| delay.delay_ms(t);
-                stepper.steps(delay_);
-            }
-        })
-        .unwrap();
-
+    // let steps = 10; // TODO
+    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
     loop {
-        info!("on!");
+        async fn delay_(t: u64) {
+            Timer::after(Duration::from_millis(t)).await;
+        }
+        stepper.steps(delay_);
     }
 }
 
