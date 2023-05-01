@@ -9,8 +9,8 @@
 #![feature(type_alias_impl_trait)]
 
 // use bsp::entry;
-use defmt::*;
-use defmt_rtt as _;
+// use defmt::*;
+// use defmt_rtt as _;
 
 use panic_probe as _;
 
@@ -29,8 +29,8 @@ use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
-    info!("Program start");
+async fn main(_spawner: Spawner)  {
+    // info!("Program start");
     let mut pac = pac::Peripherals::take().unwrap();
     // let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -74,7 +74,7 @@ async fn main(_spawner: Spawner) {
         async fn delay_(t: u64) {
             Timer::after(Duration::from_millis(t)).await;
         }
-        stepper.steps(delay_);
+        stepper.steps(delay_).await;
     }
 }
 
