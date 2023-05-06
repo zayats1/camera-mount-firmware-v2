@@ -6,7 +6,6 @@
 
 #![no_std]
 #![no_main]
-
 use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
@@ -22,17 +21,30 @@ use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     multicore::{Multicore, Stack},
     pac,
+    pac::interrupt,
     sio::Sio,
+    timer,
     watchdog::Watchdog,
 };
 
 use cortex_m::delay::Delay;
+
+use core::cell::RefCell;
+use critical_section::Mutex;
 
 use crate::drivers::StepperWithDriver;
 
 mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+
+type LedAndAlarm = (
+    hal::gpio::Pin<hal::gpio::bank0::Gpio25, hal::gpio::PushPullOutput>,
+    hal::timer::Alarm0,
+);
+
+
 
 #[entry]
 fn main() -> ! {
@@ -82,6 +94,10 @@ fn main() -> ! {
     let cores = mc.cores();
 
     let core1 = &mut cores[1];
+    
+    
+    
+    
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
             // Get the second core's copy of the `CorePeripherals`, which are per-core.
@@ -98,10 +114,18 @@ fn main() -> ! {
             }
         })
         .unwrap();
-
+        
+    unsafe {
+        pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
+    }
+    info!("on!");
     loop {
-        info!("on!");
+        cortex_m::asm::wfi();
     }
 }
+
+#[allow(non_snake_case)]
+#[interrupt]
+fn TIMER_IRQ_0() {}
 
 // End of file
