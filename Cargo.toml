@@ -14,9 +14,11 @@ embedded-hal = { version = "0.2.7", features = ["unproven"] }
 defmt = "0.3.4"
 defmt-rtt = "0.4"
 panic-probe = { version = "0.3.1", features = ["print-defmt"] }
-
 # We're using a Pico by default on this template
 rp-pico = "0.7"
+
+fugit = "0.3.6"
+critical-section = { version = "1.0.0" }
 
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.6"

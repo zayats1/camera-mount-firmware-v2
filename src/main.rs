@@ -16,14 +16,15 @@ use panic_probe as _;
 // Uncomment the BSP you included in Cargo.toml, the rest of the code does not need to change.
 use rp_pico as bsp;
 // use sparkfun_pro_micro_rp2040 as bsp;
-
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
     multicore::{Multicore, Stack},
     pac,
     pac::interrupt,
     sio::Sio,
-    timer,
+    gpio,
+    Timer,
+    timer::{Alarm,Alarm0},
     watchdog::Watchdog,
 };
 
@@ -32,19 +33,28 @@ use cortex_m::delay::Delay;
 use core::cell::RefCell;
 use critical_section::Mutex;
 
+use fugit::MicrosDurationU32;
+
+use embedded_hal::digital::v2::ToggleableOutputPin;
+
 use crate::drivers::StepperWithDriver;
 
 mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
+type Led = gpio::Pin<gpio::bank0::Gpio15, gpio::PushPullOutput>;
 
 type LedAndAlarm = (
-    hal::gpio::Pin<hal::gpio::bank0::Gpio25, hal::gpio::PushPullOutput>,
-    hal::timer::Alarm0,
+    Led,
+    Alarm0,
 );
 
+const BLINKING_TIME:MicrosDurationU32 = MicrosDurationU32::millis(300);
 
+
+// Place our LED and Alarm type in a static variable, so we can access it from interrupts
+static mut LED_AND_ALARM: Mutex<RefCell<Option<LedAndAlarm>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -96,7 +106,24 @@ fn main() -> ! {
     let core1 = &mut cores[1];
     
     
-    
+    let led_pin = pins.gpio15.into_push_pull_output();
+
+    let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
+    critical_section::with(|cs| {
+        let mut alarm = timer.alarm_0().unwrap();
+        // Schedule an alarm in 1 second
+        let _ = alarm.schedule(BLINKING_TIME);
+        // Enable generating an interrupt on alarm
+        alarm.enable_interrupt();
+        // Move alarm into ALARM, so that it can be accessed from interrupts
+        unsafe {
+            LED_AND_ALARM.borrow(cs).replace(Some((led_pin, alarm)));
+        }
+    });
+    // Unmask the timer0 IRQ so that it will generate an interrupt
+    unsafe {
+        pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
+    }
     
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
@@ -126,6 +153,22 @@ fn main() -> ! {
 
 #[allow(non_snake_case)]
 #[interrupt]
-fn TIMER_IRQ_0() {}
+fn TIMER_IRQ_0() {
+     critical_section::with(|cs| {
+        // Temporarily take our LED_AND_ALARM
+        let ledalarm = unsafe { LED_AND_ALARM.borrow(cs).take() };
+        if let Some((mut led, mut alarm)) = ledalarm {
+            alarm.clear_interrupt();
+            let _ = alarm.schedule(BLINKING_TIME);
+            led.toggle().unwrap();
+            // Return LED_AND_ALARM into our static variable
+            unsafe {
+                LED_AND_ALARM
+                    .borrow(cs)
+                    .replace_with(|_| Some((led, alarm)));
+            }
+        }
+    });
+}
 
 // End of file
