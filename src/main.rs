@@ -22,15 +22,17 @@ use bsp::hal::{
     pac,
     pac::interrupt,
     sio::Sio,
-    gpio,
-    Timer,
-    timer::{Alarm,Alarm0},
+    timer::{Alarm, Alarm0},
     watchdog::Watchdog,
+    Timer,
 };
 
 use cortex_m::delay::Delay;
 
-use core::cell::RefCell;
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicBool, Ordering},
+};
 use critical_section::Mutex;
 
 use fugit::MicrosDurationU32;
@@ -43,18 +45,11 @@ mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
-type Led = gpio::Pin<gpio::bank0::Gpio15, gpio::PushPullOutput>;
+const BLINKING_TIME: MicrosDurationU32 = MicrosDurationU32::millis(900);
 
-type LedAndAlarm = (
-    Led,
-    Alarm0,
-);
+static mut ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
 
-const BLINKING_TIME:MicrosDurationU32 = MicrosDurationU32::millis(300);
-
-
-// Place our LED and Alarm type in a static variable, so we can access it from interrupts
-static mut LED_AND_ALARM: Mutex<RefCell<Option<LedAndAlarm>>> = Mutex::new(RefCell::new(None));
+static mut IS_TICKED: AtomicBool = AtomicBool::new(false);
 
 #[entry]
 fn main() -> ! {
@@ -78,8 +73,6 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    // let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-
     let pins = bsp::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
@@ -87,11 +80,6 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    // This is the correct pin on the Raspberry Pico board. On other boards, even if they have an
-    // on-board LED, it might need to be changed.
-    // Notably, on the Pico W, the LED is not connected to any of the RP2040 GPIOs but to the cyw43 module instead. If you have
-    // a Pico W and want to toggle a LED with a simple GPIO output pin, you can connect an external
-    // LED to one of the GPIO pins, and reference that pin here.
     let clk_pin = pins.led.into_push_pull_output();
     let dir_pin = pins.gpio11.into_push_pull_output();
     let speed = 2;
@@ -104,27 +92,25 @@ fn main() -> ! {
     let cores = mc.cores();
 
     let core1 = &mut cores[1];
-    
-    
-    let led_pin = pins.gpio15.into_push_pull_output();
+
+    let mut led_pin = pins.gpio15.into_push_pull_output();
 
     let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
+
     critical_section::with(|cs| {
         let mut alarm = timer.alarm_0().unwrap();
-        // Schedule an alarm in 1 second
         let _ = alarm.schedule(BLINKING_TIME);
-        // Enable generating an interrupt on alarm
         alarm.enable_interrupt();
         // Move alarm into ALARM, so that it can be accessed from interrupts
         unsafe {
-            LED_AND_ALARM.borrow(cs).replace(Some((led_pin, alarm)));
+            ALARM.borrow(cs).replace(Some(alarm));
         }
     });
     // Unmask the timer0 IRQ so that it will generate an interrupt
     unsafe {
         pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
     }
-    
+
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
             // Get the second core's copy of the `CorePeripherals`, which are per-core.
@@ -141,31 +127,39 @@ fn main() -> ! {
             }
         })
         .unwrap();
-        
+
     unsafe {
         pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
     }
     info!("on!");
     loop {
-        cortex_m::asm::wfi();
+        let is_ticked = unsafe { IS_TICKED.load(Ordering::Relaxed) };
+        if is_ticked {
+            unsafe {
+                IS_TICKED.store(false, Ordering::Relaxed);
+            }
+            led_pin.toggle().unwrap();
+        } else {
+            cortex_m::asm::wfi();
+        }
     }
 }
 
 #[allow(non_snake_case)]
 #[interrupt]
 fn TIMER_IRQ_0() {
-     critical_section::with(|cs| {
-        // Temporarily take our LED_AND_ALARM
-        let ledalarm = unsafe { LED_AND_ALARM.borrow(cs).take() };
-        if let Some((mut led, mut alarm)) = ledalarm {
+    critical_section::with(|cs| {
+        // Temporarily take our ALARM
+        let alarm = unsafe { ALARM.borrow(cs).take() };
+        if let Some(mut alarm) = alarm {
             alarm.clear_interrupt();
             let _ = alarm.schedule(BLINKING_TIME);
-            led.toggle().unwrap();
-            // Return LED_AND_ALARM into our static variable
             unsafe {
-                LED_AND_ALARM
-                    .borrow(cs)
-                    .replace_with(|_| Some((led, alarm)));
+                IS_TICKED.store(true, Ordering::Relaxed);
+            }
+            // Return ALARM into our static variable
+            unsafe {
+                ALARM.borrow(cs).replace_with(|_| Some(alarm));
             }
         }
     });
