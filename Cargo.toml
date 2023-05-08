@@ -18,7 +18,7 @@ panic-probe = { version = "0.3.1", features = ["print-defmt"] }
 rp-pico = "0.7"
 
 fugit = "0.3.6"
-critical-section = { version = "1.0.0" }
+critical-section = { version = "1.1.1" }
 
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.6"
