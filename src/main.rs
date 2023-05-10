@@ -7,7 +7,6 @@
 #![no_std]
 #![no_main]
 
-use bsp::entry;
 use defmt::*;
 use defmt_rtt as _;
 
@@ -20,11 +19,25 @@ use rp_pico as bsp;
 
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
+    gpio,
+    gpio::pin::bank0::{Gpio0, Gpio1},
     multicore::{Multicore, Stack},
     pac,
+    pac::interrupt,
     sio::Sio,
+    uart,
     watchdog::Watchdog,
 };
+
+use embedded_hal::serial::{Read, Write};
+
+use bsp::{
+    entry,
+    hal::uart::{DataBits, StopBits, UartConfig},
+};
+
+use core::cell::RefCell;
+use critical_section::Mutex;
 
 use cortex_m::delay::Delay;
 
@@ -33,6 +46,18 @@ use crate::drivers::StepperWithDriver;
 mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+type UartPins = (
+    gpio::Pin<Gpio0, gpio::Function<gpio::Uart>>,
+    gpio::Pin<Gpio1, gpio::Function<gpio::Uart>>,
+);
+
+use fugit::RateExtU32;
+
+type Uart = uart::UartPeripheral<uart::Enabled, pac::UART0, UartPins>;
+
+/// This how we transfer the UART into the Interrupt Handler
+static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -76,11 +101,37 @@ fn main() -> ! {
     // Setup core 2 for stepper motor
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
 
+    unsafe {
+        pac::NVIC::unmask(pac::Interrupt::UART0_IRQ);
+    }
+
+    let uart_pins = (
+        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
+        pins.gpio0.into_mode::<gpio::FunctionUart>(),
+        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
+        pins.gpio1.into_mode::<gpio::FunctionUart>(),
+    );
+
+    // Make a UART on the given pins
+    let mut uart = uart::UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+        .enable(
+            UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
+            clocks.peripheral_clock.freq(),
+        )
+        .unwrap();
+
+    uart.enable_rx_interrupt();
+
+    critical_section::with(|cs| {
+        GLOBAL_UART.borrow(cs).replace(Some(uart));
+    });
+
     let sys_freq = clocks.system_clock.freq().to_Hz();
 
     let cores = mc.cores();
 
     let core1 = &mut cores[1];
+
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
             // Get the second core's copy of the `CorePeripherals`, which are per-core.
@@ -99,8 +150,40 @@ fn main() -> ! {
         .unwrap();
 
     loop {
+        cortex_m::asm::wfe();
         info!("on!");
     }
 }
 
 // End of file
+#[allow(non_snake_case)]
+#[interrupt]
+fn UART0_IRQ() {
+    static mut UART: Option<uart::UartPeripheral<uart::Enabled, pac::UART0, UartPins>> = None;
+
+    // This is one-time lazy initialisation. We steal the variable given to us
+    // via `GLOBAL_UART`.
+    if UART.is_none() {
+        critical_section::with(|cs| {
+            *UART = GLOBAL_UART.borrow(cs).take();
+        });
+    }
+
+    // Check if we have a UART to work with
+    if let Some(uart) = UART {
+        // Echo the input back to the output until the FIFO is empty. Reading
+        // from the UART should also clear the UART interrupt flag.
+        while let Ok(byte) = uart.read() {
+            let _ = uart.write(byte);
+        }
+
+        let message = "duck\n";
+        for byte in message.as_bytes() {
+            let _ = uart.write(*byte);
+        }
+    }
+
+    // Set an event to ensure the main thread always wakes up, even if it's in
+    // the process of going to sleep.
+    cortex_m::asm::sev();
+}
