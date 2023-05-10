@@ -47,18 +47,23 @@ and code cleanup
 ### 0.0.3
 
 1. add UART comunication
-2. add some calculations and servo code to main
 
 ### 0.0.4
 
-1. do some testing with real stepper motor and A4988 driver module
-2. add some unit tests
+1. merge timer async runtime
 
 ### 0.0.5
 
-1. add more calculations and test with bluetooth module
+1. do some testing with real stepper motor and A4988 driver module
+2. add some calculations and servo code to main
+3. add some unit tests
+
 
 ### 0.0.6
+
+1. add more calculations and test with bluetooth module
+
+### 0.0.7
 
 1. add more calculations 
 
