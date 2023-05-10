@@ -43,9 +43,8 @@ fn main() -> ! {
     let mut sio = Sio::new(pac.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
-    let external_xtal_freq_hz = 12_000_000u32;
     let clocks = init_clocks_and_plls(
-        external_xtal_freq_hz,
+        bsp::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
