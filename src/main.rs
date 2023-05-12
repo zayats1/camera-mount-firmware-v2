@@ -19,45 +19,29 @@ use rp_pico as bsp;
 
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
+    dma,
+    dma::DMAExt,
     gpio,
-    gpio::pin::bank0::{Gpio0, Gpio1},
     multicore::{Multicore, Stack},
     pac,
-    pac::interrupt,
     sio::Sio,
     uart,
     watchdog::Watchdog,
 };
-
-use embedded_hal::serial::{Read, Write};
 
 use bsp::{
     entry,
     hal::uart::{DataBits, StopBits, UartConfig},
 };
 
-use core::cell::RefCell;
-use critical_section::Mutex;
-
-use cortex_m::delay::Delay;
+use cortex_m::{delay::Delay, singleton};
+use fugit::RateExtU32;
 
 use crate::drivers::StepperWithDriver;
 
 mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
-
-type UartPins = (
-    gpio::Pin<Gpio0, gpio::Function<gpio::Uart>>,
-    gpio::Pin<Gpio1, gpio::Function<gpio::Uart>>,
-);
-
-use fugit::RateExtU32;
-
-type Uart = uart::UartPeripheral<uart::Enabled, pac::UART0, UartPins>;
-
-/// This how we transfer the UART into the Interrupt Handler
-static GLOBAL_UART: Mutex<RefCell<Option<Uart>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
@@ -98,13 +82,6 @@ fn main() -> ! {
     let dir_pin = pins.gpio11.into_push_pull_output();
     let speed = 2;
 
-    // Setup core 2 for stepper motor
-    let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
-
-    unsafe {
-        pac::NVIC::unmask(pac::Interrupt::UART0_IRQ);
-    }
-
     let uart_pins = (
         // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
         pins.gpio0.into_mode::<gpio::FunctionUart>(),
@@ -122,9 +99,40 @@ fn main() -> ! {
 
     uart.enable_rx_interrupt();
 
-    critical_section::with(|cs| {
-        GLOBAL_UART.borrow(cs).replace(Some(uart));
-    });
+    let dma = pac.DMA.split(&mut pac.RESETS);
+
+    uart.write_full_blocking(b"\r\n\r\nUART DMA echo example\r\n\r\n");
+
+    // In order to use DMA we need to split the UART into a RX (receive) and TX (transmit) pair
+    let (rx, tx) = uart.split();
+
+    // We can still write to the tx side of the UART after splitting
+    tx.write_full_blocking(b"Regular UART write\r\n");
+
+    // And we can DMA from a buffer into the UART
+    let teststring = b"DMA UART write\r\n";
+    let tx_transfer = dma::single_buffer::Config::new(dma.ch0, teststring, tx).start();
+
+    // Wait for the DMA transfer to finish so we can reuse the tx and the dma channel
+    let (ch0, _teststring, tx) = tx_transfer.wait();
+
+    // Let's test DMA RX into a buffer.
+    tx.write_full_blocking(b"Waiting for you to type 5 letters...\r\n");
+    let rx_buf = singleton!(: [u8; 5] = [0; 5]).unwrap();
+    let rx_transfer = dma::single_buffer::Config::new(ch0, rx, rx_buf).start();
+    let (ch0, rx, rx_buf) = rx_transfer.wait();
+
+    // Echo back the 5 characters the user typed
+    tx.write_full_blocking(b"You wrote \"");
+    tx.write_full_blocking(rx_buf);
+    tx.write_full_blocking(b"\"\r\n");
+
+    // Now just keep echoing anything that is received back out of TX
+    tx.write_full_blocking(b"Now echoing any character you write...\r\n");
+    let _tx_transfer = dma::single_buffer::Config::new(ch0, rx, tx).start();
+
+    // Setup core 2 for stepper motor
+    let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
 
     let sys_freq = clocks.system_clock.freq().to_Hz();
 
@@ -142,6 +150,7 @@ fn main() -> ! {
             let mut delay = Delay::new(core.SYST, sys_freq);
             // let steps = 10; // TODO
             let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
+
             loop {
                 let delay_ = |t: u32| delay.delay_ms(t);
                 stepper.steps(delay_);
@@ -151,39 +160,7 @@ fn main() -> ! {
 
     loop {
         cortex_m::asm::wfe();
-        info!("on!");
     }
 }
 
 // End of file
-#[allow(non_snake_case)]
-#[interrupt]
-fn UART0_IRQ() {
-    static mut UART: Option<uart::UartPeripheral<uart::Enabled, pac::UART0, UartPins>> = None;
-
-    // This is one-time lazy initialisation. We steal the variable given to us
-    // via `GLOBAL_UART`.
-    if UART.is_none() {
-        critical_section::with(|cs| {
-            *UART = GLOBAL_UART.borrow(cs).take();
-        });
-    }
-
-    // Check if we have a UART to work with
-    if let Some(uart) = UART {
-        // Echo the input back to the output until the FIFO is empty. Reading
-        // from the UART should also clear the UART interrupt flag.
-        while let Ok(byte) = uart.read() {
-            let _ = uart.write(byte);
-        }
-
-        let message = "duck\n";
-        for byte in message.as_bytes() {
-            let _ = uart.write(*byte);
-        }
-    }
-
-    // Set an event to ensure the main thread always wakes up, even if it's in
-    // the process of going to sleep.
-    cortex_m::asm::sev();
-}
