@@ -9,16 +9,17 @@
 use embedded_hal::digital::v2::OutputPin;
 
 #[derive(Default)]
-pub enum Directions {
+pub enum Direction {
     #[default]
     Forward,
     Backward,
+    Stop,
 }
 
 pub struct StepperWithDriver<T: OutputPin, U: OutputPin> {
     dir_pin: T,
     clk: U,
-    dir: Directions,
+    dir: Direction,
     speed: u32,
     acceleration: i32,
 }
@@ -28,17 +29,20 @@ where
     T: OutputPin,
     U: OutputPin,
 {
-    pub fn set_dir(&mut self, dir: Directions) {
+    pub fn set_dir(&mut self, dir: Direction) {
         self.dir = dir
     }
 
     pub fn steps<F: FnMut(u32)>(&mut self, mut delay_ms: F) {
         match self.dir {
-            Directions::Forward => {
+            Direction::Forward => {
                 self.dir_pin.set_high().unwrap_or_default();
             }
-            Directions::Backward => {
+            Direction::Backward => {
                 self.dir_pin.set_low().unwrap_or_default();
+            }
+            Direction::Stop => {
+                return;
             }
         }
         let delay_time = 1000 / self.speed;
@@ -53,11 +57,7 @@ where
         todo!()
     }
 
-    fn hold(&mut self) {
-        todo!()
-    }
-
-    fn set_speed(&mut self, speed: u32) {
+    pub fn set_speed(&mut self, speed: u32) {
         self.speed = speed;
     }
 
@@ -69,7 +69,7 @@ where
         Self {
             dir_pin,
             clk,
-            dir: Directions::default(),
+            dir: Direction::default(),
             speed,
             acceleration,
         }
