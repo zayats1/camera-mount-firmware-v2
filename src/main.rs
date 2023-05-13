@@ -120,7 +120,7 @@ fn main() -> ! {
             let mut producer = unsafe { MESSAGE_Q.split().0 };
             if uart.uart_is_readable() {
                 let mut buf = [0u8; MESSAGE_BUFFER_SIZE];
-                if let Some(()) = uart.read_full_blocking(&mut buf).ok() {
+                if let Ok(()) = uart.read_full_blocking(&mut buf) {
                     uart.write_full_blocking(&buf);
                 }
                 match parse_data(&buf) {
