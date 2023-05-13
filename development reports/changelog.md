@@ -27,9 +27,11 @@ and more smaller changes
 ### 0.0.2
 
 1. Make stepper driver run non blocking  
-- **commit:** 9e35165c42b29fea2273d63796456411896a04ed
-  
-  **move stepper to the second core for now**
+   
+   **commit:** 9e35165c42b29fea2273d63796456411896a04ed
+   
+   **move stepper to the second core for now**
+
 2. Make a branch with some RTOS
    
    **branch:**  rtos
@@ -42,26 +44,40 @@ and more smaller changes
 
 and code cleanup
 
-## TODO
-
 ### 0.0.3
 
-1. add UART comunication
+Uart comunication finnaly works as it should be, for now
+
+merge branch **uart** into **main**
+
+1. add proto data parser
+   
+   **commit:** 36b8ce46bd71de114d4587c5e7bc20bf32bc06b3
+   
+   **parse data prototype**
+
+2. add UART comunication
+   
+   **commit:** 36b8ce46bd71de114d4587c5e7bc20bf32bc06b3
+   
+   **parse implementation and ditching dma**
+
+## TODO
 
 ### 0.0.4
 
-1. merge timer async runtime
+1. add some tests with defmt-test
+2. merge timer async runtime
 
 ### 0.0.5
 
-1. do some testing with real stepper motor and A4988 driver module
-2. add some calculations and servo code to main
-3. add some unit tests
-
+1. add some calculations and servo code to main
+2. add some unit tests
 
 ### 0.0.6
 
 1. add more calculations and test with bluetooth module
+2. do some testing with real stepper motor and A4988 driver module
 
 ### 0.0.7
 
