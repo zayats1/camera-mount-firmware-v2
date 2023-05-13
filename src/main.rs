@@ -7,12 +7,14 @@
 #![no_std]
 #![no_main]
 
-use bsp::entry;
+//use critical_section::Mutex;
 use defmt::*;
 use defmt_rtt as _;
 
+use heapless::spsc::Queue;
 use panic_probe as _;
 
+use parser::Message;
 // Provide an alias for our BSP so we can switch targets quickly.
 // Uncomment the BSP you included in Cargo.toml, the rest of the code does not need to change.
 use rp_pico as bsp;
@@ -20,32 +22,44 @@ use rp_pico as bsp;
 
 use bsp::hal::{
     clocks::{init_clocks_and_plls, Clock},
+    gpio,
     multicore::{Multicore, Stack},
     pac,
+    // pac::interrupt,
     sio::Sio,
+    uart::{self, DataBits, StopBits, UartConfig},
     watchdog::Watchdog,
 };
 
-use cortex_m::delay::Delay;
+use bsp::entry;
 
-use crate::drivers::StepperWithDriver;
+use cortex_m::delay::Delay;
+use fugit::RateExtU32;
+
+use crate::{
+    drivers::StepperWithDriver,
+    parser::{parse_data, MESSAGE_BUFFER_SIZE},
+};
 
 mod drivers;
+mod parser;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+static mut MESSAGE_Q: Queue<Message, 2> = Queue::new();
 
 #[entry]
 fn main() -> ! {
     info!("Program start");
     let mut pac = pac::Peripherals::take().unwrap();
+
     // let core = pac::CorePeripherals::take().unwrap();
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     let mut sio = Sio::new(pac.SIO);
 
     // External high-speed crystal on the pico board is 12Mhz
-    let external_xtal_freq_hz = 12_000_000u32;
     let clocks = init_clocks_and_plls(
-        external_xtal_freq_hz,
+        bsp::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -65,43 +79,77 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    // This is the correct pin on the Raspberry Pico board. On other boards, even if they have an
-    // on-board LED, it might need to be changed.
-    // Notably, on the Pico W, the LED is not connected to any of the RP2040 GPIOs but to the cyw43 module instead. If you have
-    // a Pico W and want to toggle a LED with a simple GPIO output pin, you can connect an external
-    // LED to one of the GPIO pins, and reference that pin here.
+    let uart_pins = (
+        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
+        pins.gpio0.into_mode::<gpio::FunctionUart>(),
+        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
+        pins.gpio1.into_mode::<gpio::FunctionUart>(),
+    );
+
+    // Make a UART on the given pins
+    let mut uart = uart::UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+        .enable(
+            UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
+            clocks.peripheral_clock.freq(),
+        )
+        .unwrap();
+
+    uart.enable_rx_interrupt();
+
+    let core = pac::CorePeripherals::take().unwrap();
+    let sys_freq = clocks.system_clock.freq().to_Hz();
+
+    // Set up the delay for  core0.
+    let mut delay = Delay::new(core.SYST, sys_freq);
+
     let clk_pin = pins.led.into_push_pull_output();
     let dir_pin = pins.gpio11.into_push_pull_output();
+    // let steps = 10; // TODO
     let speed = 2;
+    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
 
-    // Setup core 2 for stepper motor
+    // Setup core 2 for parsing data
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
-
-    let sys_freq = clocks.system_clock.freq().to_Hz();
 
     let cores = mc.cores();
 
     let core1 = &mut cores[1];
+
     core1
-        .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
-            // Get the second core's copy of the `CorePeripherals`, which are per-core.
-            // Unfortunately, `cortex-m` doesn't support this properly right now,
-            // so we have to use `steal`.
-            let core = unsafe { pac::CorePeripherals::steal() };
-            // Set up the delay for the second core.
-            let mut delay = Delay::new(core.SYST, sys_freq);
-            // let steps = 10; // TODO
-            let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
-            loop {
-                let delay_ = |t: u32| delay.delay_ms(t);
-                stepper.steps(delay_);
+        .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
+            let mut producer = unsafe { MESSAGE_Q.split().0 };
+            if uart.uart_is_readable() {
+                let mut buf = [0u8; MESSAGE_BUFFER_SIZE];
+                if let Ok(()) = uart.read_full_blocking(&mut buf) {
+                    uart.write_full_blocking(&buf);
+                }
+                match parse_data(&buf) {
+                    Ok(m) => {
+                        let _ = producer.enqueue(m);
+                    }
+                    Err(e) => {
+                        uart.write_full_blocking(e.describe().as_bytes());
+                    }
+                };
             }
         })
         .unwrap();
 
     loop {
-        info!("on!");
+        // cortex_m::asm::wfe();
+        // uart.write_full_blocking(b"fuck");
+        loop {
+            let mut consumer = unsafe { MESSAGE_Q.split().1 };
+            if let Some(message) = consumer.dequeue() {
+                match message {
+                    Message::StepperMotorSpeed(speed) => stepper.set_speed(speed),
+                    Message::StepperMotorDir(dir) => stepper.set_dir(dir),
+                    Message::ServoAngle(_) => {}
+                }
+            }
+
+            let delay_ = |t: u32| delay.delay_ms(t);
+            stepper.steps(delay_);
+        }
     }
 }
-
-// End of file
