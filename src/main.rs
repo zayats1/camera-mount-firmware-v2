@@ -43,6 +43,7 @@ use crate::{
 
 mod drivers;
 mod parser;
+mod tests;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
@@ -95,6 +96,9 @@ fn main() -> ! {
         .unwrap();
 
     uart.enable_rx_interrupt();
+
+    let mut tester = tests::UnitTest::new(&mut uart);
+    tester.test();
 
     let core = pac::CorePeripherals::take().unwrap();
     let sys_freq = clocks.system_clock.freq().to_Hz();
