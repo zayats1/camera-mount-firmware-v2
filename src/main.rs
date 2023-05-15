@@ -97,8 +97,12 @@ fn main() -> ! {
 
     uart.enable_rx_interrupt();
 
-    let mut tester = tests::UnitTest::new(&mut uart);
-    tester.test();
+    // the code runs in debug only mode
+    #[cfg(debug_assertions)]
+    {
+        let mut tester = tests::UnitTest::new(&mut uart);
+        tester.test();
+    }
 
     let core = pac::CorePeripherals::take().unwrap();
     let sys_freq = clocks.system_clock.freq().to_Hz();
