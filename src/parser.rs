@@ -47,11 +47,7 @@ pub fn parse_data(data: &[u8]) -> Result<Message, ParseDataError> {
         let parsed = match *character {
             ComCodePrefixes::SERVO_ANGLE => {
                 let parsed_digits = parse_digits(data, i);
-                if let Some(angle) = parsed_digits {
-                    Some(Message::ServoAngle(angle))
-                } else {
-                    None
-                }
+                parsed_digits.map(Message::ServoAngle)
             }
 
             ComCodePrefixes::STEPPER_MOTOR_DIR => {
@@ -65,19 +61,11 @@ pub fn parse_data(data: &[u8]) -> Result<Message, ParseDataError> {
                         _ => None,
                     }
                 }
-                if let Some(dir) = dir {
-                    Some(Message::StepperMotorDir(dir))
-                } else {
-                    None
-                }
+                dir.map(Message::StepperMotorDir)
             }
             ComCodePrefixes::STEPPER_MOTOR_SPEED => {
                 let parsed_digits = parse_digits(data, i);
-                if let Some(speed) = parsed_digits {
-                    Some(Message::StepperMotorSpeed(speed.into()))
-                } else {
-                    None
-                }
+                parsed_digits.map(|speed| Message::StepperMotorSpeed(speed.into()))
             }
             _ => None,
         };
@@ -108,5 +96,5 @@ fn parse_digits(data: &[u8], index: usize) -> Option<u16> {
             (ch - 48) as u16 * decimal_place
         })
         .sum::<u16>();
-    return Some(parsed);
+    Some(parsed)
 }
