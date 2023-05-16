@@ -16,8 +16,8 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
         };
     }
 
-    fn assert_eq<F: PartialEq>(&mut self, first: F, second: F) {
-        self.assert(first == second);
+    fn assert_eq<F: PartialEq>(&mut self, expected: F, obtained: F) {
+        self.assert(expected == obtained);
     }
 
     fn write(&mut self, res: &[u8]) {
@@ -32,7 +32,7 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
     fn parsing_test(&mut self) {
         let data = "A090\n".as_bytes();
 
-        self.assert_eq(parse_data(data), Ok(Message::ServoAngle(90)));
+        self.assert_eq(parse_data(data), Ok(Message::ServoAngle(90u16)));
     }
 
     pub fn run_tests(&mut self) {
