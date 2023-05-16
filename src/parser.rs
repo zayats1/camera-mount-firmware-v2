@@ -55,7 +55,21 @@ pub fn parse_data(data: &[u8]) -> Result<Message, ParseDataError> {
             }
 
             ComCodePrefixes::STEPPER_MOTOR_DIR => {
-                Some(Message::StepperMotorDir(Direction::Forward))
+                let parsed_char = data.get(i + 1);
+                let mut dir = None;
+                if let Some(parsed_char) = parsed_char {
+                    dir = match *parsed_char {
+                        StepperMotorDir::FORWARD => Some(Direction::Forward),
+                        StepperMotorDir::BACKWARDS => Some(Direction::Backward),
+                        StepperMotorDir::STOP => Some(Direction::Stop),
+                        _ => None,
+                    }
+                }
+                if let Some(dir) = dir {
+                    Some(Message::StepperMotorDir(dir))
+                } else {
+                    None
+                }
             }
             ComCodePrefixes::STEPPER_MOTOR_SPEED => {
                 let parsed_digits = parse_digits(data, i);
