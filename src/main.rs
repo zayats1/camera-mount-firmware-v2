@@ -137,6 +137,7 @@ fn main() -> ! {
 
     let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO);
 
+    // TODO fix blocking while buffer isn`t full
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
             let mut producer = unsafe { MESSAGE_Q.split().0 };
@@ -156,6 +157,7 @@ fn main() -> ! {
             }
         })
         .unwrap();
+
     loop {
         let mut consumer = unsafe { MESSAGE_Q.split().1 };
         if let Some(message) = consumer.dequeue() {
