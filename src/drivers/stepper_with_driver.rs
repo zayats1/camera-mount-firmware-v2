@@ -45,6 +45,11 @@ where
                 return;
             }
         }
+        if self.speed == 0 {
+            self.dir = Direction::Stop;
+            return;
+        }
+
         let delay_time = 1000 / self.speed;
         // It is unstopable for now
         self.clk.set_high().unwrap_or_default();
