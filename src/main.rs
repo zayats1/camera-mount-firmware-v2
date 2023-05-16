@@ -156,20 +156,17 @@ fn main() -> ! {
             }
         })
         .unwrap();
-
     loop {
-        loop {
-            let mut consumer = unsafe { MESSAGE_Q.split().1 };
-            if let Some(message) = consumer.dequeue() {
-                match message {
-                    Message::StepperMotorSpeed(speed) => stepper.set_speed(speed),
-                    Message::StepperMotorDir(dir) => stepper.set_dir(dir),
-                    Message::ServoAngle(angle) => servo.set_angle(angle),
-                }
+        let mut consumer = unsafe { MESSAGE_Q.split().1 };
+        if let Some(message) = consumer.dequeue() {
+            match message {
+                Message::StepperMotorSpeed(speed) => stepper.set_speed(speed),
+                Message::StepperMotorDir(dir) => stepper.set_dir(dir),
+                Message::ServoAngle(angle) => servo.set_angle(angle),
             }
-
-            let delay_ = |t: u32| delay.delay_ms(t);
-            stepper.steps(delay_);
         }
+
+        let delay_ = |t: u32| delay.delay_ms(t);
+        stepper.steps(delay_);
     }
 }
