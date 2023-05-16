@@ -4,6 +4,7 @@ use crate::drivers::stepper_with_driver::Direction;
 
 pub const MESSAGE_BUFFER_SIZE: usize = 5;
 
+#[derive(PartialEq)]
 pub enum Message {
     StepperMotorSpeed(u32),
     StepperMotorDir(Direction),
@@ -26,6 +27,7 @@ impl StepperMotorDir {
     pub const STOP: u8 = b'S';
 }
 
+#[derive(PartialEq)]
 pub struct ParseDataError {
     description: &'static str,
 }

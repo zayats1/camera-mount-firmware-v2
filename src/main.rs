@@ -98,11 +98,11 @@ fn main() -> ! {
 
     uart.enable_rx_interrupt();
 
-    // the code runs in debug only mode
+    // the code runs on the MCU and in debug   modeonly
     #[cfg(debug_assertions)]
     {
         let mut tester = tests::UnitTest::new(&mut uart);
-        tester.test();
+        tester.run_tests();
     }
 
     let core = pac::CorePeripherals::take().unwrap();

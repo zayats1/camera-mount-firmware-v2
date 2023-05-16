@@ -8,7 +8,7 @@
 
 use embedded_hal::digital::v2::OutputPin;
 
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub enum Direction {
     #[default]
     Forward,

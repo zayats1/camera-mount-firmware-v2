@@ -1,5 +1,7 @@
 // standart rust testings doesnt work, so I should use mine instead
 use embedded_hal::serial::Write;
+
+use crate::parser::{parse_data, Message};
 pub struct UnitTest<'a, T: Write<u8>> {
     logger: &'a mut T,
 }
@@ -14,6 +16,10 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
         };
     }
 
+    fn assert_eq<F: PartialEq>(&mut self, first: F, second: F) {
+        self.assert(first == second);
+    }
+
     fn write(&mut self, res: &[u8]) {
         for byte in res {
             let _ = self.logger.write(*byte);
@@ -24,10 +30,12 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
     }
     // add tests here
     fn parsing_test(&mut self) {
-        self.assert(true);
+        let data = "A090\n".as_bytes();
+
+        self.assert_eq(parse_data(data), Ok(Message::ServoAngle(90)));
     }
 
-    pub fn test(&mut self) {
+    pub fn run_tests(&mut self) {
         //call the tests here
         self.parsing_test();
     }
