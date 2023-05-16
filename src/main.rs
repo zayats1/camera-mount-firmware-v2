@@ -71,8 +71,6 @@ fn main() -> ! {
     .ok()
     .unwrap();
 
-    // let mut delay = Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
-
     let pins = bsp::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
@@ -144,15 +142,13 @@ fn main() -> ! {
         .unwrap();
 
     loop {
-        // cortex_m::asm::wfe();
-        // uart.write_full_blocking(b"fuck");
         loop {
             let mut consumer = unsafe { MESSAGE_Q.split().1 };
             if let Some(message) = consumer.dequeue() {
                 match message {
                     Message::StepperMotorSpeed(speed) => stepper.set_speed(speed),
                     Message::StepperMotorDir(dir) => stepper.set_dir(dir),
-                    Message::ServoAngle(_) => {}
+                    Message::ServoAngle(angle) => {}
                 }
             }
 
