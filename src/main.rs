@@ -25,6 +25,7 @@ use bsp::hal::{
     gpio,
     multicore::{Multicore, Stack},
     pac,
+    pwm,
     // pac::interrupt,
     sio::Sio,
     uart::{self, DataBits, StopBits, UartConfig},
@@ -37,7 +38,7 @@ use cortex_m::delay::Delay;
 use fugit::RateExtU32;
 
 use crate::{
-    drivers::StepperWithDriver,
+    drivers::{Servo, StepperWithDriver},
     parser::{parse_data, MESSAGE_BUFFER_SIZE},
 };
 
@@ -48,6 +49,8 @@ mod tests;
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
 static mut MESSAGE_Q: Queue<Message, 2> = Queue::new();
+
+const SERVO_DUTY_ON_ZERO: u16 = 1640;
 
 #[entry]
 fn main() -> ! {
@@ -121,6 +124,19 @@ fn main() -> ! {
 
     let core1 = &mut cores[1];
 
+    let mut pwm_slices = pwm::Slices::new(pac.PWM, &mut pac.RESETS);
+
+    let pwm = &mut pwm_slices.pwm1;
+    pwm.set_ph_correct();
+    pwm.set_div_int(20u8); // 50 hz   1/50= 0.020 s
+    pwm.enable();
+
+    // Servo
+    let channel = &mut pwm.channel_b;
+    channel.output_to(pins.gpio3);
+
+    let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO);
+
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
             let mut producer = unsafe { MESSAGE_Q.split().0 };
@@ -148,7 +164,7 @@ fn main() -> ! {
                 match message {
                     Message::StepperMotorSpeed(speed) => stepper.set_speed(speed),
                     Message::StepperMotorDir(dir) => stepper.set_dir(dir),
-                    Message::ServoAngle(angle) => {}
+                    Message::ServoAngle(angle) => servo.set_angle(angle),
                 }
             }
 
