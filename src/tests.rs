@@ -37,7 +37,7 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
         let (mut producer, mut consumer) = queue.split();
 
         for byte in data {
-            if let Err(_) = producer.enqueue(*byte) {
+            if producer.enqueue(*byte).is_err() {
                 break;
             }
         }

@@ -222,7 +222,7 @@ fn UART0_IRQ() {
     // Check if we have a UART to work with
     if let Some(reader) = READER {
         while let Ok(byte) = reader.read() {
-            if let Err(_) = producer.enqueue(byte) {
+            if producer.enqueue(byte).is_err() {
                 break;
             }
         }
