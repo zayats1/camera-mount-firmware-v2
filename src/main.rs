@@ -158,6 +158,12 @@ fn main() -> ! {
 
     let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO);
 
+    unsafe {
+        // Enable the UART interrupt in the *Nested Vectored Interrupt
+        // Controller*, which is part of the Cortex-M0+ core.
+        pac::NVIC::unmask(pac::Interrupt::UART0_IRQ);
+    }
+
     // TODO fix blocking while buffer isn`t full
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
@@ -166,7 +172,6 @@ fn main() -> ! {
 
             loop {
                 cortex_m::asm::wfe();
-
                 unsafe {
                     for data in DATA_Q.into_iter() {
                         let _ = tx.write(*data);

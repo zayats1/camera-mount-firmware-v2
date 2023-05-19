@@ -3,7 +3,7 @@
 use crate::drivers::stepper_with_driver::Direction;
 use heapless::spsc::{Consumer, Queue};
 
-pub const MESSAGE_BUFFER_SIZE: usize = 5;
+pub const MESSAGE_BUFFER_SIZE: usize = 8;
 
 #[derive(PartialEq)]
 pub enum Message {
