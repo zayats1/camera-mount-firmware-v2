@@ -7,14 +7,18 @@
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
+
+use critical_section::Mutex;
 //use critical_section::Mutex;
 use defmt::*;
 use defmt_rtt as _;
 
+use embedded_hal::serial::{Read, Write};
 use heapless::spsc::Queue;
 use panic_probe as _;
 
-use parser::Message;
+use parser::{Message, MESSAGE_BUFFER_SIZE};
 // Provide an alias for our BSP so we can switch targets quickly.
 // Uncomment the BSP you included in Cargo.toml, the rest of the code does not need to change.
 use rp_pico as bsp;
@@ -25,8 +29,8 @@ use bsp::hal::{
     gpio,
     multicore::{Multicore, Stack},
     pac,
+    pac::interrupt,
     pwm,
-    // pac::interrupt,
     sio::Sio,
     uart::{self, DataBits, StopBits, UartConfig},
     watchdog::Watchdog,
@@ -39,14 +43,25 @@ use fugit::RateExtU32;
 
 use crate::{
     drivers::{Servo, StepperWithDriver},
-    parser::{parse_data, MESSAGE_BUFFER_SIZE},
+    parser::parse_data,
 };
 
 mod drivers;
 mod parser;
 mod tests;
 
+type UartPins = (
+    gpio::Pin<gpio::bank0::Gpio0, gpio::Function<gpio::Uart>>,
+    gpio::Pin<gpio::bank0::Gpio1, gpio::Function<gpio::Uart>>,
+);
+
+type Reader = uart::Reader<pac::UART0, UartPins>;
+
+static GLOBAL_READER: Mutex<RefCell<Option<Reader>>> = Mutex::new(RefCell::new(None));
+
 static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+static mut DATA_Q: Queue<u8, MESSAGE_BUFFER_SIZE> = Queue::<u8, MESSAGE_BUFFER_SIZE>::new();
 
 static mut MESSAGE_Q: Queue<Message, 2> = Queue::new();
 
@@ -89,19 +104,25 @@ fn main() -> ! {
     );
 
     // Make a UART on the given pins
-    let mut uart = uart::UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
+    let uart = uart::UartPeripheral::new(pac.UART0, uart_pins, &mut pac.RESETS)
         .enable(
             UartConfig::new(9600.Hz(), DataBits::Eight, None, StopBits::One),
             clocks.peripheral_clock.freq(),
         )
         .unwrap();
 
-    uart.enable_rx_interrupt();
+    let (mut rx, mut tx) = uart.split();
+
+    rx.enable_rx_interrupt();
+
+    critical_section::with(|cs| {
+        GLOBAL_READER.borrow(cs).replace(Some(rx));
+    });
 
     // the code runs on the MCU and in debug   modeonly
     #[cfg(debug_assertions)]
     {
-        let mut tester = tests::UnitTest::new(&mut uart);
+        let mut tester = tests::UnitTest::new(&mut tx);
         tester.run_tests();
     }
 
@@ -139,27 +160,32 @@ fn main() -> ! {
 
     // TODO fix blocking while buffer isn`t full
     core1
-        .spawn(unsafe { &mut CORE1_STACK.mem }, move || loop {
-            let mut producer = unsafe { MESSAGE_Q.split().0 };
-            if uart.uart_is_readable() {
-                let mut buf = [0u8; MESSAGE_BUFFER_SIZE];
-                if let Ok(()) = uart.read_full_blocking(&mut buf) {
-                    uart.write_full_blocking(&buf);
+        .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
+            let mut message_producer = unsafe { MESSAGE_Q.split().0 };
+            let mut data_consumer = unsafe { DATA_Q.split().1 };
+
+            loop {
+                cortex_m::asm::wfe();
+
+                unsafe {
+                    for data in DATA_Q.into_iter() {
+                        let _ = tx.write(*data);
+                    }
                 }
-                match parse_data(&buf) {
+                match parse_data(&mut data_consumer) {
                     Ok(m) => {
-                        let _ = producer.enqueue(m);
+                        let _ = message_producer.enqueue(m);
                     }
                     Err(e) => {
-                        uart.write_full_blocking(e.describe().as_bytes());
+                        tx.write_full_blocking(e.describe().as_bytes());
                     }
                 };
             }
         })
         .unwrap();
 
+    let mut consumer = unsafe { MESSAGE_Q.split().1 };
     loop {
-        let mut consumer = unsafe { MESSAGE_Q.split().1 };
         if let Some(message) = consumer.dequeue() {
             match message {
                 Message::StepperMotorSpeed(speed) => stepper.set_speed(speed),
@@ -171,4 +197,34 @@ fn main() -> ! {
         let delay_ = |t: u32| delay.delay_ms(t);
         stepper.steps(delay_);
     }
+}
+
+#[interrupt]
+fn UART0_IRQ() {
+    // Set an event to ensure the main thread always wakes up, even if it's in
+    // the process of going to sleep.
+    static mut READER: Option<Reader> = None;
+
+    let mut producer = unsafe { DATA_Q.split().0 };
+    // This is one-time lazy initialisation. We steal the variable given to us
+    // via `GLOBAL_UART`.
+    if READER.is_none() {
+        critical_section::with(|cs| {
+            *READER = GLOBAL_READER.borrow(cs).take();
+        });
+    }
+
+    // Check if we have a UART to work with
+    if let Some(reader) = READER {
+        while let Ok(byte) = reader.read() {
+            if let Err(_) = producer.enqueue(byte) {
+                break;
+            }
+        }
+    }
+
+    // Set an event to ensure the main thread always wakes up, even if it's in
+    // the process of going to sleep.
+
+    cortex_m::asm::sev();
 }

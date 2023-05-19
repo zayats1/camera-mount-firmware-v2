@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use crate::drivers::stepper_with_driver::Direction;
+use heapless::spsc::{Consumer, Queue};
 
 pub const MESSAGE_BUFFER_SIZE: usize = 5;
 
@@ -42,19 +43,21 @@ impl ParseDataError {
     }
 }
 
-pub fn parse_data(data: &[u8]) -> Result<Message, ParseDataError> {
-    for (i, character) in data.iter().enumerate() {
-        let parsed = match *character {
+pub fn parse_data(
+    consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>,
+) -> Result<Message, ParseDataError> {
+    while let Some(character) = consumer.dequeue() {
+        let parsed = match character {
             ComCodePrefixes::SERVO_ANGLE => {
-                let parsed_digits = parse_digits(data, i);
+                let parsed_digits = parse_digits(consumer);
                 parsed_digits.map(Message::ServoAngle)
             }
 
             ComCodePrefixes::STEPPER_MOTOR_DIR => {
-                let parsed_char = data.get(i + 1);
+                let parsed_char = consumer.dequeue();
                 let mut dir = None;
                 if let Some(parsed_char) = parsed_char {
-                    dir = match *parsed_char {
+                    dir = match parsed_char {
                         StepperMotorDir::FORWARD => Some(Direction::Forward),
                         StepperMotorDir::BACKWARDS => Some(Direction::Backward),
                         StepperMotorDir::STOP => Some(Direction::Stop),
@@ -64,7 +67,7 @@ pub fn parse_data(data: &[u8]) -> Result<Message, ParseDataError> {
                 dir.map(Message::StepperMotorDir)
             }
             ComCodePrefixes::STEPPER_MOTOR_SPEED => {
-                let parsed_digits = parse_digits(data, i);
+                let parsed_digits = parse_digits(consumer);
                 parsed_digits.map(|speed| Message::StepperMotorSpeed(speed.into()))
             }
             _ => None,
@@ -77,13 +80,13 @@ pub fn parse_data(data: &[u8]) -> Result<Message, ParseDataError> {
     Err(ParseDataError::new())
 }
 
-fn parse_digits(data: &[u8], index: usize) -> Option<u16> {
+fn parse_digits(consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>) -> Option<u16> {
     const DIGIT_COUNT: u16 = 3;
     let mut digits = [0u8; DIGIT_COUNT as usize];
-    for (j, digit) in digits.iter_mut().enumerate() {
-        let aquired_diget = data.get(index + 1 + j);
+    for (i, digit) in digits.iter_mut().enumerate() {
+        let aquired_diget = consumer.dequeue();
         if let Some(num) = aquired_diget {
-            *digit = *num;
+            *digit = num;
         } else {
             return None;
         }

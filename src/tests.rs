@@ -1,7 +1,8 @@
 // standart rust testings doesnt work, so I should use mine instead
 use embedded_hal::serial::Write;
 
-use crate::parser::{parse_data, Message};
+use crate::parser::{parse_data, Message, MESSAGE_BUFFER_SIZE};
+use heapless::spsc::Queue;
 pub struct UnitTest<'a, T: Write<u8>> {
     logger: &'a mut T,
 }
@@ -31,8 +32,17 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
     // add tests here
     fn parsing_test(&mut self) {
         let data = "A090\n".as_bytes();
+        let mut queue = Queue::<u8, MESSAGE_BUFFER_SIZE>::new();
 
-        self.assert_eq(parse_data(data), Ok(Message::ServoAngle(90u16)));
+        let (mut producer, mut consumer) = queue.split();
+
+        for byte in data {
+            if let Err(_) = producer.enqueue(*byte) {
+                break;
+            }
+        }
+
+        self.assert_eq(parse_data(&mut consumer), Ok(Message::ServoAngle(90u16)));
     }
 
     pub fn run_tests(&mut self) {
