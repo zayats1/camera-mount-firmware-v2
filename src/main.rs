@@ -7,7 +7,10 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
+use core::{
+    cell::RefCell,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use critical_section::Mutex;
 //use critical_section::Mutex;
@@ -64,6 +67,8 @@ static mut CORE1_STACK: Stack<4096> = Stack::new();
 static mut DATA_Q: Queue<u8, MESSAGE_BUFFER_SIZE> = Queue::<u8, MESSAGE_BUFFER_SIZE>::new();
 
 static mut MESSAGE_Q: Queue<Message, 2> = Queue::new();
+
+static mut IS_DATA_READY: AtomicBool = AtomicBool::new(false);
 
 const SERVO_DUTY_ON_ZERO: u16 = 1640;
 
@@ -171,20 +176,30 @@ fn main() -> ! {
             let mut data_consumer = unsafe { DATA_Q.split().1 };
 
             loop {
-                cortex_m::asm::wfe();
-                unsafe {
-                    for data in DATA_Q.into_iter() {
-                        let _ = tx.write(*data);
+                let is_data_ready = unsafe { IS_DATA_READY.load(Ordering::Relaxed) };
+                if is_data_ready {
+                    unsafe {
+                        IS_DATA_READY.store(false, Ordering::Relaxed);
                     }
+
+                    // the code runs on the MCU and in debug   modeonly
+                    #[cfg(debug_assertions)]
+                    unsafe {
+                        for data in DATA_Q.into_iter() {
+                            let _ = tx.write(*data);
+                        }
+                    }
+                    match parse_data(&mut data_consumer) {
+                        Ok(m) => {
+                            let _ = message_producer.enqueue(m);
+                        }
+                        Err(e) => {
+                            tx.write_full_blocking(e.describe().as_bytes());
+                        }
+                    };
+                } else {
+                    cortex_m::asm::wfe();
                 }
-                match parse_data(&mut data_consumer) {
-                    Ok(m) => {
-                        let _ = message_producer.enqueue(m);
-                    }
-                    Err(e) => {
-                        tx.write_full_blocking(e.describe().as_bytes());
-                    }
-                };
             }
         })
         .unwrap();
@@ -221,6 +236,9 @@ fn UART0_IRQ() {
 
     // Check if we have a UART to work with
     if let Some(reader) = READER {
+        unsafe {
+            IS_DATA_READY.store(true, Ordering::Relaxed);
+        }
         while let Ok(byte) = reader.read() {
             if producer.enqueue(byte).is_err() {
                 break;
