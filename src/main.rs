@@ -45,11 +45,13 @@ mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
-const TIMER_FREQ: MicrosDurationU32 = MicrosDurationU32::micros(10);
-
 static mut ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
 
 static mut IS_TICKED: AtomicBool = AtomicBool::new(false);
+
+const TIMER_FREQ: MicrosDurationU32 = MicrosDurationU32::millis(1);
+const STEPS_PER_SECOND: u32 = 5;
+const BLINKING_TIME: u32 = 500;
 
 #[entry]
 fn main() -> ! {
@@ -80,10 +82,6 @@ fn main() -> ! {
         &mut pac.RESETS,
     );
 
-    let clk_pin = pins.led.into_push_pull_output();
-    let dir_pin = pins.gpio11.into_push_pull_output();
-    let speed = 2;
-
     // Setup core 2 for stepper motor
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
 
@@ -94,6 +92,9 @@ fn main() -> ! {
     let core1 = &mut cores[1];
 
     let mut led_pin = pins.gpio15.into_push_pull_output();
+
+    let clk_pin = pins.led.into_push_pull_output();
+    let dir_pin = pins.gpio11.into_push_pull_output();
 
     let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
 
@@ -111,6 +112,8 @@ fn main() -> ! {
         pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
     }
 
+    // let steps = 10; // TODO
+    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, STEPS_PER_SECOND);
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
             // Get the second core's copy of the `CorePeripherals`, which are per-core.
@@ -119,34 +122,21 @@ fn main() -> ! {
             let core = unsafe { pac::CorePeripherals::steal() };
             // Set up the delay for the second core.
             let mut delay = Delay::new(core.SYST, sys_freq);
-            // let steps = 10; // TODO
-            let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
+
             loop {
-                let delay_ = |t: u32| delay.delay_ms(t);
-                stepper.steps(delay_);
+                delay.delay_ms(BLINKING_TIME);
+                led_pin.toggle().unwrap();
             }
         })
         .unwrap();
 
-    unsafe {
-        pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
-    }
-    info!("on!");
-
     loop {
-        static mut TIME: u32 = 0;
         let is_ticked = unsafe { IS_TICKED.load(Ordering::Relaxed) };
         if is_ticked {
             unsafe {
                 IS_TICKED.store(false, Ordering::Relaxed);
             }
-            unsafe {
-                TIME += 1;
-                if TIME == 300000 {
-                    TIME = 0;
-                    led_pin.toggle().unwrap();
-                }
-            }
+            stepper.steps_with_timer(1000);
         } else {
             cortex_m::asm::wfi();
         }
