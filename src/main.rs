@@ -45,7 +45,7 @@ mod drivers;
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
 
-const BLINKING_TIME: MicrosDurationU32 = MicrosDurationU32::millis(900);
+const TIMER_FREQ: MicrosDurationU32 = MicrosDurationU32::micros(10);
 
 static mut ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
 
@@ -99,7 +99,7 @@ fn main() -> ! {
 
     critical_section::with(|cs| {
         let mut alarm = timer.alarm_0().unwrap();
-        let _ = alarm.schedule(BLINKING_TIME);
+        let _ = alarm.schedule(TIMER_FREQ);
         alarm.enable_interrupt();
         // Move alarm into ALARM, so that it can be accessed from interrupts
         unsafe {
@@ -132,13 +132,21 @@ fn main() -> ! {
         pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
     }
     info!("on!");
+
     loop {
+        static mut TIME: u32 = 0;
         let is_ticked = unsafe { IS_TICKED.load(Ordering::Relaxed) };
         if is_ticked {
             unsafe {
                 IS_TICKED.store(false, Ordering::Relaxed);
             }
-            led_pin.toggle().unwrap();
+            unsafe {
+                TIME += 1;
+                if TIME == 300000 {
+                    TIME = 0;
+                    led_pin.toggle().unwrap();
+                }
+            }
         } else {
             cortex_m::asm::wfi();
         }
@@ -153,7 +161,7 @@ fn TIMER_IRQ_0() {
         let alarm = unsafe { ALARM.borrow(cs).take() };
         if let Some(mut alarm) = alarm {
             alarm.clear_interrupt();
-            let _ = alarm.schedule(BLINKING_TIME);
+            let _ = alarm.schedule(TIMER_FREQ);
             unsafe {
                 IS_TICKED.store(true, Ordering::Relaxed);
             }
