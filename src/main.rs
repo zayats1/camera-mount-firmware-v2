@@ -8,7 +8,7 @@
 #![no_main]
 
 //use critical_section::Mutex;
-use defmt::*;
+
 use defmt_rtt as _;
 
 use heapless::spsc::Queue;
@@ -54,7 +54,6 @@ const SERVO_DUTY_ON_ZERO: u16 = 1640;
 
 #[entry]
 fn main() -> ! {
-    info!("Program start");
     let mut pac = pac::Peripherals::take().unwrap();
 
     // let core = pac::CorePeripherals::take().unwrap();
