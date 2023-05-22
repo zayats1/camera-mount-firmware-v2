@@ -76,6 +76,8 @@ const TIMER_FREQ_MS: u32 = 1000;
 const TIMER_FREQ: MicrosDurationU32 = MicrosDurationU32::millis(TIMER_FREQ_MS / 1000u32);
 
 const SERVO_DUTY_ON_ZERO: u16 = 1640;
+const SERVO_MAX_ANGLE: u16 = 180;
+
 const STEPPER_MOTOR_INITIAL_SPEED: u32 = 5;
 
 #[entry]
@@ -161,7 +163,7 @@ fn main() -> ! {
     let channel = &mut pwm.channel_b;
     channel.output_to(pins.gpio3);
 
-    let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO);
+    let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO, SERVO_MAX_ANGLE);
 
     // Timer init
     let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
