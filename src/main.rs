@@ -133,16 +133,15 @@ fn main() -> ! {
     let core = pac::CorePeripherals::take().unwrap();
     let sys_freq = clocks.system_clock.freq().to_Hz();
 
-    // Set up the delay for  core0.
+    // Set up the delay for the first core.
     let mut delay = Delay::new(core.SYST, sys_freq);
 
     let clk_pin = pins.led.into_push_pull_output();
     let dir_pin = pins.gpio11.into_push_pull_output();
-    // let steps = 10; // TODO
     let speed = 2;
     let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
 
-    // Setup core 2 for parsing data
+    // Setup second core for parsing data
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
 
     let cores = mc.cores();
@@ -156,7 +155,6 @@ fn main() -> ! {
     pwm.set_div_int(20u8); // 50 hz   1/50= 0.020 s
     pwm.enable();
 
-    // Servo
     let channel = &mut pwm.channel_b;
     channel.output_to(pins.gpio3);
 
@@ -168,7 +166,6 @@ fn main() -> ! {
         pac::NVIC::unmask(pac::Interrupt::UART0_IRQ);
     }
 
-    // TODO fix blocking while buffer isn`t full
     core1
         .spawn(unsafe { &mut CORE1_STACK.mem }, move || {
             let mut message_producer = unsafe { MESSAGE_Q.split().0 };
@@ -181,7 +178,7 @@ fn main() -> ! {
                         IS_DATA_READY.store(false, Ordering::Relaxed);
                     }
 
-                    // the code runs on the MCU and in debug   modeonly
+                    // the code runs on the MCU and in debug  mode only
                     #[cfg(debug_assertions)]
                     unsafe {
                         for data in DATA_Q.into_iter() {
@@ -220,13 +217,10 @@ fn main() -> ! {
 
 #[interrupt]
 fn UART0_IRQ() {
-    // Set an event to ensure the main thread always wakes up, even if it's in
-    // the process of going to sleep.
     static mut READER: Option<Reader> = None;
 
     let mut producer = unsafe { DATA_Q.split().0 };
-    // This is one-time lazy initialisation. We steal the variable given to us
-    // via `GLOBAL_UART`.
+
     if READER.is_none() {
         critical_section::with(|cs| {
             *READER = GLOBAL_READER.borrow(cs).take();
@@ -247,6 +241,5 @@ fn UART0_IRQ() {
 
     // Set an event to ensure the main thread always wakes up, even if it's in
     // the process of going to sleep.
-
     cortex_m::asm::sev();
 }
