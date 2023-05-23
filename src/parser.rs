@@ -86,34 +86,28 @@ pub fn parse_data(
 
 fn parse_digits(consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>) -> Option<u16> {
     const DIGIT_COUNT: u16 = 3;
-    let mut digits = [0u8; DIGIT_COUNT as usize];
+
+    let mut decimal_place = DIGIT_COUNT;
+    let mut digits = [0u16; DIGIT_COUNT as usize];
+
     for digit in digits.iter_mut() {
         let aquired_diget = consumer.dequeue();
         if let Some(num) = aquired_diget {
-            *digit = num;
-        } else {
-            return None;
-        }
-    }
-    let mut decimal_place = 10u16.pow(DIGIT_COUNT as u32);
-    let parsed = digits.into_iter().map(|ch| {
-        decimal_place /= 10;
-        let num = ch - 48;
-        let is_num = ch - 48 < 10;
-        if is_num {
-            return Some(num as u16 * decimal_place);
-        }
-        None
-    });
+            let num = num - 48;
 
-    let mut sum = 0;
-    for digit in parsed {
-        if let Some(d) = digit {
-            sum += d;
+            let is_num = num < 10;
+
+            if is_num {
+                decimal_place -= 1;
+                *digit = num as u16 * 10u16.pow(decimal_place as u32);
+            } else {
+                return None;
+            }
         } else {
             return None;
         }
     }
+    let sum = digits.into_iter().sum();
 
     Some(sum)
 }
