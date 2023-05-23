@@ -48,6 +48,7 @@ where
 
         if self.speed == 0 {
             self.stop();
+            return;
         }
 
         let waiting_time = timer_freq_micros / self.speed;
@@ -68,7 +69,6 @@ where
 
     fn stop(&mut self) {
         self.clk.set_low().unwrap_or_default();
-        return;
     }
 
     pub fn set_speed(&mut self, speed: u32) {
