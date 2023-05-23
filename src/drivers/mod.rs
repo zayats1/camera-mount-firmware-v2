@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-pub(crate) mod servo;
+pub mod servo;
 pub mod stepper_with_driver;
 
 pub use servo::Servo;

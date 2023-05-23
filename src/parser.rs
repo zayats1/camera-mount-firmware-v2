@@ -1,7 +1,11 @@
-#![allow(unused)]
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 
 use crate::drivers::stepper_with_driver::Direction;
-use heapless::spsc::{Consumer, Queue};
+use heapless::spsc::Consumer;
 
 pub const MESSAGE_BUFFER_SIZE: usize = 8;
 
@@ -83,7 +87,7 @@ pub fn parse_data(
 fn parse_digits(consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>) -> Option<u16> {
     const DIGIT_COUNT: u16 = 3;
     let mut digits = [0u8; DIGIT_COUNT as usize];
-    for (i, digit) in digits.iter_mut().enumerate() {
+    for digit in digits.iter_mut() {
         let aquired_diget = consumer.dequeue();
         if let Some(num) = aquired_diget {
             *digit = num;

@@ -1,4 +1,10 @@
-// standart rust testings doesnt work, so I should use mine instead
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+// standart rust tests doesnt work, so I should use mine instead
 use embedded_hal::serial::Write;
 
 use crate::parser::{parse_data, Message, MESSAGE_BUFFER_SIZE};
