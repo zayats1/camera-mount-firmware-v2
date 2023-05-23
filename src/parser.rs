@@ -1,7 +1,11 @@
-#![allow(unused)]
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
 
 use crate::drivers::stepper_with_driver::Direction;
-use heapless::spsc::{Consumer, Queue};
+use heapless::spsc::Consumer;
 
 pub const MESSAGE_BUFFER_SIZE: usize = 8;
 
@@ -82,22 +86,24 @@ pub fn parse_data(
 
 fn parse_digits(consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>) -> Option<u16> {
     const DIGIT_COUNT: u16 = 3;
-    let mut digits = [0u8; DIGIT_COUNT as usize];
-    for (i, digit) in digits.iter_mut().enumerate() {
+
+    let mut decimal_place = DIGIT_COUNT;
+    let mut digits = [0u16; DIGIT_COUNT as usize];
+
+    for digit in digits.iter_mut() {
         let aquired_diget = consumer.dequeue();
         if let Some(num) = aquired_diget {
-            *digit = num;
+            if num.is_ascii_digit() {
+                decimal_place -= 1;
+                *digit = (num - b'0') as u16 * 10u16.pow(decimal_place as u32);
+            } else {
+                return None;
+            }
         } else {
             return None;
         }
     }
-    let mut decimal_place = 10u16.pow(DIGIT_COUNT as u32);
-    let parsed = digits
-        .into_iter()
-        .map(|ch| {
-            decimal_place /= 10;
-            (ch - 48) as u16 * decimal_place
-        })
-        .sum::<u16>();
-    Some(parsed)
+    let sum = digits.into_iter().sum();
+
+    Some(sum)
 }

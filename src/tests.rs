@@ -1,7 +1,13 @@
-// standart rust testings doesnt work, so I should use mine instead
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+// standart rust tests doesnt work, so I should use mine instead
 use embedded_hal::serial::Write;
 
-use crate::parser::{parse_data, Message, MESSAGE_BUFFER_SIZE};
+use crate::parser::{parse_data, Message, ParseDataError, MESSAGE_BUFFER_SIZE};
 use heapless::spsc::Queue;
 pub struct UnitTest<'a, T: Write<u8>> {
     logger: &'a mut T,
@@ -45,8 +51,40 @@ impl<'a, T: Write<u8>> UnitTest<'a, T> {
         self.assert_eq(parse_data(&mut consumer), Ok(Message::ServoAngle(90u16)));
     }
 
+    fn parsing_test_err(&mut self) {
+        let data = "AAAA\n".as_bytes();
+        let mut queue = Queue::<u8, MESSAGE_BUFFER_SIZE>::new();
+
+        let (mut producer, mut consumer) = queue.split();
+
+        for byte in data {
+            if producer.enqueue(*byte).is_err() {
+                break;
+            }
+        }
+
+        self.assert_eq(parse_data(&mut consumer), Err(ParseDataError::new()));
+    }
+
+    fn parsing_incoplete_data_test_err(&mut self) {
+        let data = "S09\n".as_bytes();
+        let mut queue = Queue::<u8, MESSAGE_BUFFER_SIZE>::new();
+
+        let (mut producer, mut consumer) = queue.split();
+
+        for byte in data {
+            if producer.enqueue(*byte).is_err() {
+                break;
+            }
+        }
+
+        self.assert_eq(parse_data(&mut consumer), Err(ParseDataError::new()));
+    }
+
     pub fn run_tests(&mut self) {
         //call the tests here
         self.parsing_test();
+        self.parsing_test_err();
+        self.parsing_incoplete_data_test_err();
     }
 }

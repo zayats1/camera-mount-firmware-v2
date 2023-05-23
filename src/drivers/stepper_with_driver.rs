@@ -4,8 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#![allow(unused)]
-
 use embedded_hal::digital::v2::OutputPin;
 
 #[derive(Default, PartialEq)]
@@ -21,7 +19,6 @@ pub struct StepperWithDriver<T: OutputPin, U: OutputPin> {
     clk: U,
     dir: Direction,
     speed: u32,
-    acceleration: i32,
 }
 
 impl<T, U> StepperWithDriver<T, U>
@@ -33,7 +30,10 @@ where
         self.dir = dir
     }
 
-    pub fn steps<F: FnMut(u32)>(&mut self, mut delay_ms: F) {
+    // TODO merge it to a better stepper motor library
+    pub fn steps_with_timer(&mut self, timer_freq_micros: u32) {
+        static mut IS_HIGH: bool = true;
+        static mut CURRENT_TIME: u32 = 0;
         match self.dir {
             Direction::Forward => {
                 self.dir_pin.set_high().unwrap_or_default();
@@ -42,41 +42,46 @@ where
                 self.dir_pin.set_low().unwrap_or_default();
             }
             Direction::Stop => {
+                self.stop();
                 return;
             }
         }
+
         if self.speed == 0 {
-            self.dir = Direction::Stop;
+            self.stop();
             return;
         }
 
-        let delay_time = 1000 / self.speed;
-        // It is unstopable for now
-        self.clk.set_high().unwrap_or_default();
-        delay_ms(delay_time); // for prototype
-        self.clk.set_low().unwrap_or_default();
-        delay_ms(delay_time);
+        let waiting_time = timer_freq_micros / self.speed;
+        unsafe {
+            if CURRENT_TIME >= waiting_time {
+                CURRENT_TIME = 0;
+                IS_HIGH = !IS_HIGH;
+            }
+            CURRENT_TIME += 1;
+
+            if IS_HIGH {
+                self.clk.set_high().unwrap_or_default();
+            } else {
+                self.clk.set_low().unwrap_or_default();
+            }
+        }
     }
 
     fn stop(&mut self) {
-        todo!()
+        self.clk.set_low().unwrap_or_default();
     }
 
     pub fn set_speed(&mut self, speed: u32) {
         self.speed = speed;
     }
 
-    fn set_acceleration(&mut self, acceleration: i32) {
-        self.acceleration = acceleration;
-    }
-
-    pub fn new(dir_pin: T, clk: U, speed: u32, acceleration: i32) -> Self {
+    pub fn new(dir_pin: T, clk: U, initial_speed: u32) -> Self {
         Self {
             dir_pin,
             clk,
             dir: Direction::default(),
-            speed,
-            acceleration,
+            speed: initial_speed,
         }
     }
 }

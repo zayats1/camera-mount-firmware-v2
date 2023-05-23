@@ -35,14 +35,15 @@ use bsp::hal::{
     pac::interrupt,
     pwm,
     sio::Sio,
+    timer::{Alarm, Alarm0},
     uart::{self, DataBits, StopBits, UartConfig},
     watchdog::Watchdog,
+    Timer,
 };
 
 use bsp::entry;
 
-use cortex_m::delay::Delay;
-use fugit::RateExtU32;
+use fugit::{MicrosDurationU32, RateExtU32};
 
 use crate::{
     drivers::{Servo, StepperWithDriver},
@@ -62,15 +63,22 @@ type Reader = uart::Reader<pac::UART0, UartPins>;
 
 static GLOBAL_READER: Mutex<RefCell<Option<Reader>>> = Mutex::new(RefCell::new(None));
 
-static mut CORE1_STACK: Stack<4096> = Stack::new();
-
 static mut DATA_Q: Queue<u8, MESSAGE_BUFFER_SIZE> = Queue::<u8, MESSAGE_BUFFER_SIZE>::new();
-
 static mut MESSAGE_Q: Queue<Message, 2> = Queue::new();
-
 static mut IS_DATA_READY: AtomicBool = AtomicBool::new(false);
 
+static mut CORE1_STACK: Stack<4096> = Stack::new();
+
+static mut ALARM: Mutex<RefCell<Option<Alarm0>>> = Mutex::new(RefCell::new(None));
+static mut IS_TICKED: AtomicBool = AtomicBool::new(false);
+
+const TIMER_FREQ_MS: u32 = 1000;
+const TIMER_FREQ: MicrosDurationU32 = MicrosDurationU32::millis(TIMER_FREQ_MS / 1000u32);
+
 const SERVO_DUTY_ON_ZERO: u16 = 1640;
+const SERVO_MAX_ANGLE: u16 = 180;
+
+const STEPPER_MOTOR_INITIAL_SPEED: u32 = 5;
 
 #[entry]
 fn main() -> ! {
@@ -130,16 +138,11 @@ fn main() -> ! {
         tester.run_tests();
     }
 
-    let core = pac::CorePeripherals::take().unwrap();
-    let sys_freq = clocks.system_clock.freq().to_Hz();
-
-    // Set up the delay for the first core.
-    let mut delay = Delay::new(core.SYST, sys_freq);
-
+    //Setup stepper motor
     let clk_pin = pins.led.into_push_pull_output();
     let dir_pin = pins.gpio11.into_push_pull_output();
-    let speed = 2;
-    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, speed, 0);
+
+    let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, STEPPER_MOTOR_INITIAL_SPEED);
 
     // Setup second core for parsing data
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
@@ -150,6 +153,8 @@ fn main() -> ! {
 
     let mut pwm_slices = pwm::Slices::new(pac.PWM, &mut pac.RESETS);
 
+    // Servo init
+
     let pwm = &mut pwm_slices.pwm1;
     pwm.set_ph_correct();
     pwm.set_div_int(20u8); // 50 hz   1/50= 0.020 s
@@ -158,12 +163,28 @@ fn main() -> ! {
     let channel = &mut pwm.channel_b;
     channel.output_to(pins.gpio3);
 
-    let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO);
+    let mut servo = Servo::new(channel, SERVO_DUTY_ON_ZERO, SERVO_MAX_ANGLE);
+
+    // Timer init
+    let mut timer = Timer::new(pac.TIMER, &mut pac.RESETS);
+
+    critical_section::with(|cs| {
+        let mut alarm = timer.alarm_0().unwrap();
+        let _ = alarm.schedule(TIMER_FREQ);
+        alarm.enable_interrupt();
+        // Move alarm into ALARM, so that it can be accessed from interrupts
+        unsafe {
+            ALARM.borrow(cs).replace(Some(alarm));
+        }
+    });
 
     unsafe {
         // Enable the UART interrupt in the *Nested Vectored Interrupt
         // Controller*, which is part of the Cortex-M0+ core.
         pac::NVIC::unmask(pac::Interrupt::UART0_IRQ);
+
+        // Unmask the timer0 IRQ so that it will generate an interrupt
+        pac::NVIC::unmask(pac::Interrupt::TIMER_IRQ_0);
     }
 
     core1
@@ -210,8 +231,15 @@ fn main() -> ! {
             }
         }
 
-        let delay_ = |t: u32| delay.delay_ms(t);
-        stepper.steps(delay_);
+        let is_ticked = unsafe { IS_TICKED.load(Ordering::Relaxed) };
+        if is_ticked {
+            unsafe {
+                IS_TICKED.store(false, Ordering::Relaxed);
+            }
+            stepper.steps_with_timer(TIMER_FREQ_MS);
+        }
+
+        cortex_m::asm::wfe();
     }
 }
 
@@ -239,6 +267,29 @@ fn UART0_IRQ() {
         }
     }
 
+    // Set an event to ensure the main thread always wakes up, even if it's in
+    // the process of going to sleep.
+    cortex_m::asm::sev();
+}
+
+#[allow(non_snake_case)]
+#[interrupt]
+fn TIMER_IRQ_0() {
+    critical_section::with(|cs| {
+        // Temporarily take our ALARM
+        let alarm = unsafe { ALARM.borrow(cs).take() };
+        if let Some(mut alarm) = alarm {
+            alarm.clear_interrupt();
+            let _ = alarm.schedule(TIMER_FREQ);
+            unsafe {
+                IS_TICKED.store(true, Ordering::Relaxed);
+            }
+            // Return ALARM into our static variable
+            unsafe {
+                ALARM.borrow(cs).replace_with(|_| Some(alarm));
+            }
+        }
+    });
     // Set an event to ensure the main thread always wakes up, even if it's in
     // the process of going to sleep.
     cortex_m::asm::sev();
