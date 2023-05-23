@@ -96,12 +96,24 @@ fn parse_digits(consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>) -> Option<u16>
         }
     }
     let mut decimal_place = 10u16.pow(DIGIT_COUNT as u32);
-    let parsed = digits
-        .into_iter()
-        .map(|ch| {
-            decimal_place /= 10;
-            (ch - 48) as u16 * decimal_place
-        })
-        .sum::<u16>();
-    Some(parsed)
+    let parsed = digits.into_iter().map(|ch| {
+        decimal_place /= 10;
+        let num = ch - 48;
+        let is_num = ch - 48 < 10;
+        if is_num {
+            return Some(num as u16 * decimal_place);
+        }
+        None
+    });
+
+    let mut sum = 0;
+    for digit in parsed {
+        if let Some(d) = digit {
+            sum += d;
+        } else {
+            return None;
+        }
+    }
+
+    Some(sum)
 }
