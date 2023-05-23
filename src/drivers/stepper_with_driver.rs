@@ -42,10 +42,14 @@ where
                 self.dir_pin.set_low().unwrap_or_default();
             }
             Direction::Stop => {
-                self.clk.set_low().unwrap_or_default();
-                return;
+                self.stop();
             }
         }
+
+        if self.speed == 0 {
+            self.stop();
+        }
+
         let waiting_time = timer_freq_micros / self.speed;
         unsafe {
             if CURRENT_TIME >= waiting_time {
@@ -60,6 +64,11 @@ where
                 self.clk.set_low().unwrap_or_default();
             }
         }
+    }
+
+    fn stop(&mut self) {
+        self.clk.set_low().unwrap_or_default();
+        return;
     }
 
     pub fn set_speed(&mut self, speed: u32) {
