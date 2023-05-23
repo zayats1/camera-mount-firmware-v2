@@ -43,6 +43,7 @@ where
             }
             Direction::Stop => {
                 self.stop();
+                return;
             }
         }
 
