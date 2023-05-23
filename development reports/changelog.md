@@ -64,28 +64,55 @@ merge branch **uart** into **main**
 
 ## TODO
 
-### 0.0.4
+### 0.1.0
 
-1. add some tests with defmt-test
-2. merge timer async runtime
+**The biggest pre release ever**
 
-### 0.0.5
+1. add  servo code to main
+   **commit:**  fabe11b38e41269d9e3b7c50b88db37928e5fbc8
 
-1. add some calculations and servo code to main
 2. add some unit tests
+   **commit:**  c0ed866693b550db6938021d98249f7e285c660b
+   
+   **unit test prototype**
 
-### 0.0.6
+3. make stepper motor run with timer
+   **commit:** 9c01616e2ef10a9dd2b177052da8e6dff31291f8
+   
+   **Merge timer**
 
-1. add more calculations and test with bluetooth module
-2. do some testing with real stepper motor and A4988 driver module
+4. improve dataparsing algorithm and uart
+   **commit:** 13b1c5029f9a8c1f717a0ef5789f00839dbbd9d4
+   
+   **improve parsing**
+   
+   **commit:** cdfa8ec8a1b3524d946923c37e2929bfa84c3c0c
+   
+   **Incomplete data should not be parsed**
+   
+   **commit:** def9c8c2891f2dc2a76970a1c74adaae1a710164
+   
+   **Merge pull request rom zayats1/queue**
+   
+   and bunch of small changes and cleanups
 
-### 0.0.7
+### 0.1.1
 
-1. add more calculations 
+1. add more unit tests
+
+### 0.1.2
+
+1. do some testing with real stepper motor and A4988 driver module
+
+2. test with bluetooth module
+
+### 0.1.3
+
+1. add some tests calculations 
 
 2. cleanup code a bit
 
-## <u>0.1.0</u>
+## 0.1.4
 
 1. test the project on my custom dev kit
 
