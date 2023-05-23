@@ -93,13 +93,10 @@ fn parse_digits(consumer: &mut Consumer<u8, MESSAGE_BUFFER_SIZE>) -> Option<u16>
     for digit in digits.iter_mut() {
         let aquired_diget = consumer.dequeue();
         if let Some(num) = aquired_diget {
-            let num = num - 48;
-
-            let is_num = num < 10;
-
+            let is_num = b'0' <= num && num <= b'9';
             if is_num {
                 decimal_place -= 1;
-                *digit = num as u16 * 10u16.pow(decimal_place as u32);
+                *digit = (num - b'0') as u16 * 10u16.pow(decimal_place as u32);
             } else {
                 return None;
             }
