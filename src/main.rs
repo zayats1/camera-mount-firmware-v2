@@ -139,7 +139,7 @@ fn main() -> ! {
     }
 
     //Setup stepper motor
-    let clk_pin = pins.led.into_push_pull_output();
+    let clk_pin = pins.led.into_push_pull_output(); // gpio 15 in real world
     let dir_pin = pins.gpio11.into_push_pull_output();
 
     let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, STEPPER_MOTOR_INITIAL_SPEED);
