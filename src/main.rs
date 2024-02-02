@@ -55,8 +55,8 @@ mod parser;
 mod tests;
 
 type UartPins = (
-    gpio::Pin<gpio::bank0::Gpio0, gpio::Function<gpio::Uart>>,
-    gpio::Pin<gpio::bank0::Gpio1, gpio::Function<gpio::Uart>>,
+    gpio::Pin<gpio::bank0::Gpio16, gpio::Function<gpio::Uart>>,
+    gpio::Pin<gpio::bank0::Gpio17, gpio::Function<gpio::Uart>>,
 );
 
 type Reader = uart::Reader<pac::UART0, UartPins>;
@@ -109,10 +109,10 @@ fn main() -> ! {
     );
 
     let uart_pins = (
-        // UART TX (characters sent from RP2040) on pin 1 (GPIO0)
-        pins.gpio0.into_mode::<gpio::FunctionUart>(),
-        // UART RX (characters received by RP2040) on pin 2 (GPIO1)
-        pins.gpio1.into_mode::<gpio::FunctionUart>(),
+        // UART TX (characters sent from RP2040) on
+        pins.gpio16.into_mode::<gpio::FunctionUart>(),
+        // UART RX (characters received by RP2040)
+        pins.gpio17.into_mode::<gpio::FunctionUart>(),
     );
 
     // Make a UART on the given pins
@@ -139,8 +139,10 @@ fn main() -> ! {
     }
 
     //Setup stepper motor
-    let clk_pin = pins.led.into_push_pull_output(); // gpio 15 in real world
-    let dir_pin = pins.gpio11.into_push_pull_output();
+    // let clk_pin = pins.led.into_push_pull_output(); // gpio 15 in real world
+    let clk_pin = pins.gpio15.into_push_pull_output();
+    // let dir_pin = pins.gpio11.into_push_pull_output();
+    let dir_pin = pins.led.into_push_pull_output();
 
     let mut stepper = StepperWithDriver::new(dir_pin, clk_pin, STEPPER_MOTOR_INITIAL_SPEED);
 
