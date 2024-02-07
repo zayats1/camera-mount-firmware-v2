@@ -8,9 +8,9 @@ use embedded_hal::digital::v2::OutputPin;
 
 #[derive(Default, PartialEq)]
 pub enum Direction {
-    #[default]
     Forward,
     Backward,
+    #[default]
     Stop,
 }
 
